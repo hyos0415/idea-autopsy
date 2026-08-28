@@ -16,7 +16,7 @@
 | [`coroner`](skills/coroner/) | 검시관 | 아이디어 판별 — capability 분해 → 4계층 탐색(AI native / 스킬·플러그인 / MCP / OSS·제품) → 검증 → **사망진단서** 발급 (Just Use AI / Configure / Build a Skill / Build a Custom Product). 사인란에는 근거 링크가 붙는다 |
 | [`executor`](skills/executor/) | 유언 집행인 | 판정문 → **유언장(작업 지시서)** — 커버된 유산은 기존 도구에게(설정 가이드), 남은 gap은 상속인(동료)에게(이슈 단위 + 선행 조건 + 출처 표시). Taskmaster 호환 출력 |
 | [`design-coroner`](skills/design-coroner/) | 디자인 검시관 | 디자인 시스템·컴포넌트 전담 — Adopt / Adapt / Create 판정 |
-| `rigor` (사양만, [plugin/](plugin/)) | 사후경직 | 판정문의 주장([WEB] 태그·"확인했다"·"없다")을 실제 도구 호출 로그와 대조하는 검증 게이트 — 물렁한 주장을 걷어내고 굳은 사실만 남긴다. **미구현·미검증** (아래 참조) |
+| [`rigor`](plugin/hooks/) (Stop 훅) | 사후경직 | 판정문의 주장([WEB] 태그·"확인했다")을 실제 도구 호출 로그와 대조하는 검증 게이트 — 물렁한 주장을 걷어내고 굳은 사실만 남긴다. 대응 호출이 없으면 차단·반송(최대 2회). **구현 완료, 실런 회귀 측정 미완** (아래 참조) |
 
 부수 출력: **장기기증 카드** — "만들지 마" 판정 시에도 발견물에서 차용할 자산(아키텍처,
 분류 체계, 패턴)을 목록으로 동봉합니다.
@@ -69,10 +69,14 @@ coroner가 "gap 실존"을 내면 그다음 "팔리나"를 /validate류가 이�
 
 ## plugin/ 에 대한 정직 고지
 
-plugin/ 은 Claude Code 플러그인 스캐폴드(스킬 번들 + rigor 훅 사양)이며 **아직 설치·동작
-검증을 거치지 않았습니다.** 이 검시소의 규율상, 검증하지 않은 것을 작동한다고 쓸 수 없습니다.
-검증 절차는 [plugin/README.md](plugin/README.md)의 체크리스트를 따르세요
-(`claude --plugin-dir ./plugin` 로컬 테스트부터). 검증 완료 후 이 문단은 삭제됩니다.
+**검증된 것**: 마켓플레이스 설치·스킬 3종 로드·rigor 훅 로드가 실제로 확인되었습니다
+(Claude Code 2.1.250). rigor는 유닛 7케이스와 플러그인 경유 통합 3케이스를 통과했고,
+위조 재현 입력에서 반송이 실제 발생하며 깨끗한 산출물은 무간섭 통과합니다.
+
+**아직 검증되지 않은 것**: 스킬 3종의 판정 품질 자체는 여전히 미검증 프로토타입입니다
+(근거는 [docs/experiment-report.md](docs/experiment-report.md)). rigor의 오탐률도
+합성 케이스 기준일 뿐, [docs/run-ledger.md](docs/run-ledger.md)의 등록 런을 훅과 함께
+재실행한 회귀 측정은 아직입니다. 이 검시소의 규율상, 측정하지 않은 것을 수치로 쓰지 않습니다.
 
 ## 피드백 주시는 법 (환영합니다)
 

@@ -1,0 +1,16 @@
+{
+  "description": "rigor — 산출물의 근거 주장과 실제 도구 호출 기록을 대조하는 Stop 게이트",
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/rigor.py",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  }
+}

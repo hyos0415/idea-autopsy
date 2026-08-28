@@ -8,7 +8,7 @@
     {
       "name": "idea-autopsy",
       "source": "./plugin",
-      "description": "Build or use? Autopsy your idea before building it — coroner(판별)·executor(지시서)·design-coroner(디자인). EXPERIMENTAL: rigor hook is spec-only."
+      "description": "Build or use? Autopsy your idea before building it — coroner(판별)·executor(지시서)·design-coroner(디자인). rigor Stop hook cross-checks claims against the tool-call log. EXPERIMENTAL: skill verdict quality not yet validated."
     }
   ]
 }
