@@ -56,5 +56,5 @@ claude --plugin-dir ./plugin             # 실제 로드 → /plugin Errors 탭 
 - **훅이 안 돎** → 스크립트 실행 권한 (`chmod +x`), 이벤트명 대소문자 (`PostToolUse`)
 - **마켓플레이스 인식 실패** → 레포 루트 `.claude-plugin/marketplace.json` 존재 확인
 - **뭐가 잘못됐는지 모르겠음** → `claude --debug` 로 로딩 로그 확인
-- rigor 훅은 현재 **사양만 존재** (hooks/rigor-spec.md) — hooks.json이 없으므로 아무 훅도
-  로드되지 않는 것이 정상입니다
+- **훅 반송문이 무시됨** → Stop 훅에서 `hookSpecificOutput.decision`은 차단되지 않습니다.
+  최상위 `{"decision":"block","reason":"..."}` 를 쓰세요 (실측, hooks/rigor-spec.md 참조)
