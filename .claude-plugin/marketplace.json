@@ -1,0 +1,14 @@
+{
+  "name": "idea-autopsy",
+  "owner": {
+    "name": "hyos0415",
+    "url": "https://github.com/hyos0415"
+  },
+  "plugins": [
+    {
+      "name": "idea-autopsy",
+      "source": "./plugin",
+      "description": "Build or use? Autopsy your idea before building it — coroner(판별)·executor(지시서)·design-coroner(디자인). EXPERIMENTAL: rigor hook is spec-only."
+    }
+  ]
+}

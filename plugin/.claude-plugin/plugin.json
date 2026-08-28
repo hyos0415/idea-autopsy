@@ -1,0 +1,10 @@
+{
+  "name": "idea-autopsy",
+  "description": "Build or use? Autopsy your idea before building it - coroner (verdict), executor (handoff), design-coroner (design systems). EXPERIMENTAL - not yet validated.",
+  "version": "0.1.0-experimental",
+  "author": {
+    "name": "hyos0415",
+    "url": "https://github.com/hyos0415"
+  },
+  "homepage": "https://github.com/hyos0415/idea-autopsy"
+}
