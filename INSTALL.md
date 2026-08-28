@@ -36,7 +36,7 @@ claude --plugin-dir ./plugin
 사용자 쪽 설치:
 
 ```bash
-claude plugin marketplace add <github유저명>/idea-autopsy
+claude plugin marketplace add hyos0415/idea-autopsy
 claude plugin install idea-autopsy@idea-autopsy
 # "Run /reload-plugins to activate." 가 뜨면 그대로 실행
 ```
