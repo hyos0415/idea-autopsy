@@ -130,15 +130,18 @@ def tools_used(transcript_path):
     return used
 
 
-# 코드 스팬·코드 블록 안의 내용은 인용이지 주장이 아니다. 태그를 '적용'할 때는 맨
-# 텍스트로 쓰고, 태그에 '대해 말할' 때는 백틱으로 감싼다 — 실측(런 G, Opus 5):
-# "`[WEB]` 태그는 한 개도 쓰지 않았습니다". 부정문 면제보다 이쪽이 더 확실한 신호다.
+# 펜스 코드 블록 안의 내용은 인용이지 주장이 아니다 — 실측(런 H, Opus 5): 모델이
+# failure log 블록 안에 자기 위반을 기록했는데 게이트가 그 기록을 다시 위반으로 잡았다.
+#
+# 인라인 코드(백틱)는 제거하지 않는다. 한때 "백틱=논의"로 보고 지웠으나 실측
+# (S2·S5, Opus 5)에서 반증됐다 — 두 런은 표 칸의 실제 태그를 전부 `[WEB]` 형태로
+# 썼고, 그러면 진짜 태그 29개가 통째로 안 보인다. 태그를 '언급'만 하는 문장은
+# 부정문 면제가 대신 걸러낸다(런 G: "`[WEB]` 태그는 한 개도 쓰지 않았습니다").
 FENCED = re.compile(r"```.*?```", re.DOTALL)
-INLINE_CODE = re.compile(r"`[^`\n]*`")
 
 
 def strip_quoted(text):
-    return INLINE_CODE.sub(" ", FENCED.sub(" ", text))
+    return FENCED.sub(" ", text)
 
 
 def sentences(text):
@@ -171,13 +174,14 @@ def find_violations(message, used):
         # 실측(런 G, Opus 5): "[WEB] 태그는 한 개도 쓰지 않았습니다"가 반송 대상이 됐다.
         if NEGATION.search(sentence):
             continue
-        for tag, needed in TAG_TOOLS.items():
-            if f"[{tag}]" not in sentence:
-                continue
-            if (needed & used) or mcp_fetched(used):
-                break
-            violations.append((f"[{tag}] 태그", sentence))
-            break
+        # 한 문장에 태그가 여러 개 붙을 수 있다 — 분해표는 한 칸에 출처를 여럿 적는다.
+        # 첫 만족 태그에서 멈추면 근거 있는 [WEB]이 근거 없는 [FILE]을 가려준다.
+        # 실측(S4, Opus 5): "n8n 템플릿 [WEB] / 세션에 붙어 있는 Notion MCP [FILE]"가 통과했다.
+        present = [t for t in TAG_TOOLS if f"[{t}]" in sentence]
+        if present:
+            for tag in present:
+                if not ((TAG_TOOLS[tag] & used) or mcp_fetched(used)):
+                    violations.append((f"[{tag}] 태그", sentence))
         else:
             # 일반 검증 주장은 도구 종류를 특정할 수 없으므로 조회성 호출 전반을 인정한다
             if not gathered_anything(used) and any(

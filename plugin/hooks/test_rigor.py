@@ -47,9 +47,12 @@ CASES = [
  ("런G 재현: 태그 미사용 선언",      "capability 분해표\n아래에서 `[WEB]` 태그는 한 개도 쓰지 않았습니다. 쓸 자격이 없기 때문입니다.", ["Skill"], "pass"),
  ("런G 재현: 태그+확인불가 병기",    "capability 분해표\n[MEMORY] 노션이 대면 녹음을 지원하는지는 확인 불가 — 문서를 열 수 없었다.", ["Skill"], "pass"),
  ("위조 [WEB] 단정문은 여전히 차단",  "capability 분해표\n[WEB] Notion Calendar가 이 capability를 해결한다.", ["Skill"], "block"),
- ("코드스팬 안 태그는 논의",          "capability 분해표\n출처 태그로 `[WEB]`, `[FILE]`, `[MEMORY]`를 씁니다.", ["Skill"], "pass"),
+ ("S2·S5 재현: 백틱 태그도 실적용",   "capability 분해표\n| 3 | 중복 탐지 | imagededup·czkawka 계열 `[WEB]` | 해결 |", ["Skill"], "block"),
+ ("런G 재현: 백틱 태그 + 부정문",      "capability 분해표\n아래에서 `[WEB]` 태그는 한 개도 쓰지 않았습니다.", ["Skill"], "pass"),
  ("코드블록 안 위조는 인용",          "capability 분해표\n반송문 예시:\n```\n[WEB] 공식 문서를 확인했다\n```", ["Skill"], "pass"),
  ("맨텍스트 태그는 여전히 차단",       "capability 분해표\n[FILE] 로컬 설정에서 값을 읽어 대조했다.", ["Skill"], "block"),
+ ("S4 재현: 한 칸에 근거O+근거X",     "capability 분해표\n| 6 | 아카이브 | n8n 템플릿 [WEB] / 세션에 붙어 있는 Notion MCP [FILE] | 해결 |", ["WebSearch","WebFetch"], "block"),
+ ("한 칸에 근거 둘 다 있음",          "capability 분해표\n| 6 | 아카이브 | n8n 템플릿 [WEB] / 로컬 설정 [FILE] | 해결 |", ["WebSearch","Bash"], "pass"),
 ]
 fail = 0
 for i,(name,msg,tools,want) in enumerate(CASES):
