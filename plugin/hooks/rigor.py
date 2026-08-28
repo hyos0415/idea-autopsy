@@ -18,28 +18,47 @@ import json
 import os
 import re
 import sys
+import time
 
 MAX_RETURNS = 2
 
 # 태그 → 그 태그를 정당화하는 도구
+# Agent는 어느 쪽에도 들어간다 — 서브에이전트가 대신 조사하면 부모 트랜스크립트에는
+# Agent 호출만 남고 그 안의 WebSearch는 보이지 않는다. 위임을 위조로 몰면 안 된다.
 TAG_TOOLS = {
-    "WEB": {"WebSearch", "WebFetch"},
-    "FILE": {"Read", "Glob", "Grep", "Bash", "NotebookEdit"},
+    "WEB": {"WebSearch", "WebFetch", "Agent"},
+    "FILE": {"Read", "Glob", "Grep", "Bash", "NotebookEdit", "Agent"},
 }
 
-# 도구 호출 없이 쓰면 위조가 되는 검증 주장
+# MCP 도구는 서버마다 이름이 달라 열거할 수 없다. mcp__ 접두사가 붙은 것만 대상으로,
+# 남은 이름에 조회성 동사가 있으면 근거 확보 행위로 인정한다. 내장 도구는 이 경로를
+# 타지 않는다 — ToolSearch는 도구 목록 검색이지 웹 조회가 아니다.
+MCP_FETCH_LIKE = re.compile(
+    r"^mcp__.*(fetch|search|read|get|list|query|browse|crawl|scrape)", re.IGNORECASE
+)
+
+# 스킬 로드는 근거 수집이 아니다 — 지침을 읽은 것뿐이다
+NON_EVIDENCE = {"Skill", "TodoWrite", "AskUserQuestion"}
+
+# 도구 호출 없이 쓰면 위조가 되는 검증 주장.
+# 도구 '이름'이 아니라 '행위'를 잡아야 한다 — "WebFetch가 없다"는 주장이 아니라 고지다.
 VERIFY_PATTERNS = [
     r"확인했",
     r"확인함",
+    r"확인한 결과",
     r"검증했",
     r"직접 확인",
     r"문서를? 확인",
     r"README를? 확인",
     r"원문을? 확인",
     r"검색해서 확인",
-    r"web[_ ]?fetch",
 ]
-VERIFY_TOOLS = {"WebSearch", "WebFetch", "Read", "Glob", "Grep", "Bash"}
+
+# 정직한 축소는 통과 대상이다. 부정·미검증 서술은 검증 주장이 아니라 그 반대다.
+NEGATION = re.compile(
+    r"(못했|못함|못한|않았|않음|없었|없고|없음|없습니다|미검증|미확인|"
+    r"확인 불가|검증하지|수행하지|실행하지|불가능|실패)"
+)
 
 # 이 게이트가 감시하는 산출물인지 판별 — 아니면 그냥 통과시킨다
 ARTIFACT_MARKERS = [
@@ -51,6 +70,21 @@ ARTIFACT_MARKERS = [
     r"failure log",
     r"Adopt/Adapt/Create",
 ]
+
+
+def log(verdict, **fields):
+    """RIGOR_LOG가 가리키는 파일에 판정을 한 줄씩 남긴다.
+    회귀 측정(오탐률·반송 후 행동 분포)의 원자료가 된다."""
+    path = os.environ.get("RIGOR_LOG")
+    if not path:
+        return
+    record = {"ts": time.strftime("%Y-%m-%dT%H:%M:%S"), "verdict": verdict}
+    record.update(fields)
+    try:
+        with open(path, "a", encoding="utf-8") as fh:
+            fh.write(json.dumps(record, ensure_ascii=False) + "\n")
+    except OSError:
+        pass
 
 
 def fail_open(msg):
@@ -89,7 +123,7 @@ def tools_used(transcript_path):
                     if isinstance(block, dict) and block.get("type") == "tool_use":
                         name = block.get("name")
                         if name:
-                            used.add(name.split("__")[-1])
+                            used.add(name)
     except OSError as exc:
         print(f"rigor: transcript 읽기 실패 — {exc}", file=sys.stderr)
         return None
@@ -106,16 +140,34 @@ def sentences(text):
     return parts
 
 
+def mcp_fetched(used):
+    """조회성 MCP 도구를 하나라도 호출했는가."""
+    return any(MCP_FETCH_LIKE.search(name) for name in used)
+
+
+def gathered_anything(used):
+    """근거가 될 만한 도구를 하나라도 호출했는가. 일반 검증 주장은 어느 도구로
+    확인했는지 특정할 수 없으므로 이 느슨한 기준을 쓴다."""
+    return bool(used - NON_EVIDENCE)
+
+
 def find_violations(message, used):
     """대응 호출이 없는 주장만 모은다."""
     violations = []
     for sentence in sentences(message):
         for tag, needed in TAG_TOOLS.items():
-            if f"[{tag}]" in sentence and not (needed & used):
-                violations.append((f"[{tag}] 태그", sentence))
+            if f"[{tag}]" not in sentence:
+                continue
+            if (needed & used) or mcp_fetched(used):
                 break
+            violations.append((f"[{tag}] 태그", sentence))
+            break
         else:
-            if not (VERIFY_TOOLS & used) and any(
+            # 부정문은 검증 주장이 아니다 — "확인하지 못했다"는 정직한 고지다
+            if NEGATION.search(sentence):
+                continue
+            # 일반 검증 주장은 도구 종류를 특정할 수 없으므로 조회성 호출 전반을 인정한다
+            if not gathered_anything(used) and any(
                 re.search(p, sentence, re.IGNORECASE) for p in VERIFY_PATTERNS
             ):
                 violations.append(("검증 주장", sentence))
@@ -163,20 +215,24 @@ def main():
 
     # 감시 대상 산출물이 아니면 통과
     if not any(re.search(m, message, re.IGNORECASE) for m in ARTIFACT_MARKERS):
+        log("skip", reason="not-an-artifact")
         sys.exit(0)
 
     used = tools_used(data.get("transcript_path"))
     if used is None:
+        log("fail-open", reason="no-transcript")
         fail_open("transcript를 읽을 수 없어 대조를 생략함")
 
     violations = find_violations(message, used)
     if not violations:
+        log("pass", tools=sorted(used))
         sys.exit(0)
 
     path = counter_path(data.get("session_id"))
     count = read_count(path)
 
     if count >= MAX_RETURNS:
+        log("uncorrectable", violations=[v[1] for v in violations], tools=sorted(used))
         # 정교화된 위조를 무한 반송하지 않는다 — 플래그만 남기고 통과시킨다
         print(
             json.dumps(
@@ -192,6 +248,13 @@ def main():
         )
         sys.exit(0)
 
+    log(
+        "block",
+        attempt=count + 1,
+        kinds=[v[0] for v in violations],
+        violations=[v[1] for v in violations],
+        tools=sorted(used),
+    )
     write_count(path, count + 1)
 
     listed = "\n".join(f"- ({kind}) {text}" for kind, text in violations[:5])
@@ -203,7 +266,9 @@ def main():
         "둘 중 하나로 해소하세요 — (1) 해당 도구를 실제로 실행해 근거를 확보하고 그 "
         "부분만 고쳐 다시 제출, 또는 (2) 탐색을 줄이기로 했다면 태그를 [INFERENCE]/"
         "[MEMORY]로 바꾸고 확인하지 않았다는 사실을 명시. 탐색을 줄인 것 자체는 위반이 "
-        "아니며, 하지 않은 확인을 했다고 쓰는 것만 위반입니다."
+        "아니며, 하지 않은 확인을 했다고 쓰는 것만 위반입니다.\n\n"
+        "태그 정의: [WEB]=이번 실행의 웹 조회, [FILE]=이번 실행에서 읽은 로컬 파일. "
+        "도구 스키마나 시스템 메시지를 본 것은 둘 다 아니며, 태그 없이 사실로 서술하세요."
     )
 
     # 최상위 decision/reason 이어야 한다. 공식 문서의 hookSpecificOutput 예시는
