@@ -8,6 +8,11 @@ description: (유언 집행인) coroner/build-or-use 판정 결과(capability �
 > 유언 집행인: 고인(아이디어)의 유산을 유언장(작업 지시서)대로 분배한다 —
 > 커버된 자산은 기존 도구에게, 남은 gap은 상속인(동료)에게.
 
+> **실행 모델 요구사항 — 상위 모델 권장.**
+> 입력이 되는 coroner 판정문의 신뢰도가 곧 이 지시서의 신뢰도다. 하위 티어 모델이 만든
+> 판정문(검증 없는 "해결", 위조된 출처 태그)을 그대로 이슈로 옮기면 오류가 그대로 상속된다.
+> 근거: `docs/run-ledger.md`, coroner SKILL.md 상단 고지.
+
 ## 전제
 
 이 스킬의 입력은 **coroner(build-or-use) 판정문**이다 (capability 분해표 + coverage 상태 + 근거).

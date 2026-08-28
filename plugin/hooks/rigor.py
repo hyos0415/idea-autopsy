@@ -130,9 +130,20 @@ def tools_used(transcript_path):
     return used
 
 
+# 코드 스팬·코드 블록 안의 내용은 인용이지 주장이 아니다. 태그를 '적용'할 때는 맨
+# 텍스트로 쓰고, 태그에 '대해 말할' 때는 백틱으로 감싼다 — 실측(런 G, Opus 5):
+# "`[WEB]` 태그는 한 개도 쓰지 않았습니다". 부정문 면제보다 이쪽이 더 확실한 신호다.
+FENCED = re.compile(r"```.*?```", re.DOTALL)
+INLINE_CODE = re.compile(r"`[^`\n]*`")
+
+
+def strip_quoted(text):
+    return INLINE_CODE.sub(" ", FENCED.sub(" ", text))
+
+
 def sentences(text):
     parts = []
-    for line in text.splitlines():
+    for line in strip_quoted(text).splitlines():
         line = line.strip()
         if not line:
             continue
@@ -155,6 +166,11 @@ def find_violations(message, used):
     """대응 호출이 없는 주장만 모은다."""
     violations = []
     for sentence in sentences(message):
+        # 부정문은 어떤 주장도 아니다. 태그를 '쓰지 않았다'는 선언에도 태그 글자가
+        # 들어 있으므로, 태그 검사보다 먼저 걸러야 한다.
+        # 실측(런 G, Opus 5): "[WEB] 태그는 한 개도 쓰지 않았습니다"가 반송 대상이 됐다.
+        if NEGATION.search(sentence):
+            continue
         for tag, needed in TAG_TOOLS.items():
             if f"[{tag}]" not in sentence:
                 continue
@@ -163,9 +179,6 @@ def find_violations(message, used):
             violations.append((f"[{tag}] 태그", sentence))
             break
         else:
-            # 부정문은 검증 주장이 아니다 — "확인하지 못했다"는 정직한 고지다
-            if NEGATION.search(sentence):
-                continue
             # 일반 검증 주장은 도구 종류를 특정할 수 없으므로 조회성 호출 전반을 인정한다
             if not gathered_anything(used) and any(
                 re.search(p, sentence, re.IGNORECASE) for p in VERIFY_PATTERNS
