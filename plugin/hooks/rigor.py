@@ -134,9 +134,28 @@ def emit(payload):
 
 
 def tools_used(transcript_path):
-    """세션 전체의 tool_use 이름 집합. 턴 단위로 좁히지 않는 것은 의도적이다 —
-    coroner 한 판정이 여러 턴에 걸치므로, 좁히면 오탐이 난다."""
-    used = set()
+    """세션 전체에서 **성공한** tool_use의 이름 집합. 턴 단위로 좁히지 않는 것은
+    의도적이다 — coroner 한 판정이 여러 턴에 걸치므로, 좁히면 오탐이 난다.
+
+    호출을 세는 것이 아니라 결과를 봐야 한다. 실측(런 M, Sonnet 5): 모델이
+    WebSearch를 6회·WebFetch를 1회 호출했는데 전부
+
+        {"type":"tool_result","is_error":true,
+         "content":"Claude requested permissions to use WebSearch,
+                    but you haven't granted it yet."}
+
+    로 거부됐다. 그런데 게이트는 tool_use 블록만 읽었으므로 WebSearch를 증거로
+    계산했고, 그 런의 모든 [WEB] 태그가 **거부된 호출의 힘으로 통과**했다.
+    호출만 시도하고 [WEB]을 붙이면 뚫린다는 뜻이며, 이 게이트의 존재 이유를
+    정면으로 무너뜨린다. 그 런에서 모델이 스스로 "웹 검증 못 했다"고 밝혀서
+    드러났을 뿐, 위조했다면 잡지 못했다.
+
+    같은 도구를 여러 번 부르면 **한 번이라도 성공한 것**만 증거로 센다.
+    결과 레코드를 못 찾은 호출은 성공으로 간주한다 — transcript lag로 결과가
+    아직 안 쓰였을 수 있고, 훅 자신의 불확실로 사용자를 막지 않는다(fail-open)."""
+    uses = {}  # tool_use id → 도구 이름
+    unmatched = set()  # id가 없는 호출 — 대조 불가이므로 성공 취급
+    errored = set()  # 결과가 오류(거부·실패)로 돌아온 호출 id
     if not transcript_path or not os.path.exists(transcript_path):
         return None
     try:
@@ -153,14 +172,26 @@ def tools_used(transcript_path):
                 if not isinstance(content, list):
                     continue
                 for block in content:
-                    if isinstance(block, dict) and block.get("type") == "tool_use":
+                    if not isinstance(block, dict):
+                        continue
+                    kind = block.get("type")
+                    if kind == "tool_use":
                         name = block.get("name")
-                        if name:
-                            used.add(name)
+                        if not name:
+                            continue
+                        tid = block.get("id")
+                        if tid:
+                            uses[tid] = name
+                        else:
+                            unmatched.add(name)
+                    elif kind == "tool_result" and block.get("is_error"):
+                        tid = block.get("tool_use_id")
+                        if tid:
+                            errored.add(tid)
     except OSError as exc:
         print(f"rigor: transcript 읽기 실패 — {exc}", file=sys.stderr)
         return None
-    return used
+    return {name for tid, name in uses.items() if tid not in errored} | unmatched
 
 
 # 펜스 코드 블록 안의 내용은 인용이지 주장이 아니다 — 실측(런 H, Opus 5): 모델이

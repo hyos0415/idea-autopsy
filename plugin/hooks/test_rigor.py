@@ -11,10 +11,18 @@ HOOK = os.path.join(os.path.dirname(os.path.abspath(__file__)), "rigor.py")
 tmp = tempfile.mkdtemp()
 
 def transcript(tools):
+    """도구명 앞의 '!'는 거부/실패한 호출을 뜻한다 (is_error 결과가 붙는다).
+    실측 런 M에서 거부된 WebSearch가 증거로 계산된 것을 고정하기 위한 장치."""
     p = os.path.join(tmp, "t_%d.jsonl" % abs(hash(tuple(sorted(tools)))))
     with open(p, "w", encoding="utf-8") as f:
-        for t in tools:
-            f.write(json.dumps({"type": "assistant", "message": {"content": [{"type": "tool_use", "name": t}]}}) + "\n")
+        for i, t in enumerate(tools):
+            failed = t.startswith("!")
+            name = t[1:] if failed else t
+            tid = "tu_%d" % i
+            f.write(json.dumps({"type": "assistant", "message": {"content": [{"type": "tool_use", "id": tid, "name": name}]}}) + "\n")
+            if failed:
+                denial = "Claude requested permissions to use %s, but you haven't granted it yet." % name
+                f.write(json.dumps({"type": "user", "message": {"content": [{"type": "tool_result", "tool_use_id": tid, "is_error": True, "content": denial}]}}) + "\n")
         if not tools:
             f.write(json.dumps({"type": "assistant", "message": {"content": [{"type": "text", "text": "x"}]}}) + "\n")
     return p
@@ -70,6 +78,13 @@ CASES = [
  # 아니라를 그냥 면제하면 위조가 빠져나간다 — 대비 수사는 면제 대상이 아니다.
  ("대비 수사 아니라는 면제 아님",    "capability 분해표\n| 1 | OCR | 추측이 아니라 확인된 사실입니다 [WEB] | 해결 |", ["Skill"], "block"),
  ("대비 수사 + 검증 대비도 차단",    "capability 분해표\n| 2 | 파싱 | 단순 확인이 아니라 직접 검증했습니다 [WEB] | 해결 |", ["Skill"], "block"),
+ # 런M 실조건: 호출은 했지만 전부 권한 거부 — 거부는 근거가 아니다.
+ # 이걸 놓치면 "호출만 시도하고 태그 붙이기"로 게이트가 뚫린다.
+ ("거부된 WebSearch는 근거 아님",      "capability 분해표\n[WEB] 공식 문서를 확인했다.", ["!WebSearch"], "block"),
+ ("런M 실조건 재현: 웹 전부 거부",      "capability 분해표\n[WEB] n8n 템플릿이 존재한다.", ["Skill","ToolSearch","!WebSearch","!WebFetch"], "block"),
+ ("한 번이라도 성공하면 근거 인정",      "capability 분해표\n[WEB] 공식 문서를 확인했다.", ["!WebSearch","WebSearch"], "pass"),
+ ("거부된 Read는 [FILE] 근거 아님",    "capability 분해표\n[FILE] 로컬 설정에서 값을 읽었다.", ["!Read"], "block"),
+ ("거부된 도구만 있으면 검증주장도 차단",  "capability 분해표\n원문을 확인했다.", ["!WebFetch"], "block"),
 ]
 fail = 0
 for i,(name,msg,tools,want) in enumerate(CASES):
