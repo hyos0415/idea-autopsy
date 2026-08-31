@@ -64,6 +64,22 @@ NEGATION = re.compile(
     r"확인 불가|검증하지|수행하지|실행하지|불가능|실패)"
 )
 
+# 부정의 두 번째 형태 — "A한 게 아니라 B" 와 태그 오용 자백.
+# 실측(런 M, Sonnet 5): 모델이 "파일을 읽어서 확인한 게 아니라 이번 대화의 시스템
+# 메시지에서 본 것이라 [FILE] 태그는 오용입니다"라고 자백했는데, 게이트가 그 자백을
+# 다시 위반으로 잡았다. NEGATION 목록에 '아니라'도 '오용'도 없었기 때문이다 —
+# 런 G("[WEB] 태그는 한 개도 쓰지 않았습니다")와 같은 계열의 정직 처벌이다.
+#
+# '아니라'를 그냥 넣으면 위조가 빠져나간다: "추측이 아니라 확인된 사실입니다. [WEB] ..."
+# 그래서 **명사화된 행위절의 부정**만 인정한다 — 조사 '게/것이/것은'이 있어야 한다.
+# "확인한 게 아니라"(자백)는 면제되고 "확인이 아니라"(대비 수사)는 면제되지 않는다.
+ACTION_DENIAL = re.compile(
+    r"(?:읽|검색|조회|열어|확인|검증)[가-힣]{0,4}\s*(?:게|것이|것은|것도|적이|바가)\s*아니"
+)
+
+# 태그가 틀렸다는 자백. 자기 태그를 오용이라 부르면서 그 태그로 위조하는 것은 성립하지 않는다.
+TAG_ADMISSION = re.compile(r"(오용|오표기|오기재)")
+
 # 이 게이트가 감시하는 산출물인지 판별 — 아니면 그냥 통과시킨다
 ARTIFACT_MARKERS = [
     r"\[(?:WEB|FILE|INPUT|SKILL|MEMORY|INFERENCE)\]",
@@ -209,6 +225,16 @@ def gathered_anything(used):
     return bool(used - NON_EVIDENCE)
 
 
+def is_disclaimed(sentence):
+    """이 문장이 주장이 아니라 그 반대(부정·미검증 고지·오용 자백)인가.
+    태그 검사보다 먼저 물어야 한다 — 부정 서술에도 태그 글자가 들어 있다."""
+    return bool(
+        NEGATION.search(sentence)
+        or ACTION_DENIAL.search(sentence)
+        or TAG_ADMISSION.search(sentence)
+    )
+
+
 def find_violations(message, used):
     """대응 호출이 없는 주장만 모은다."""
     violations = []
@@ -216,7 +242,7 @@ def find_violations(message, used):
         # 부정문은 어떤 주장도 아니다. 태그를 '쓰지 않았다'는 선언에도 태그 글자가
         # 들어 있으므로, 태그 검사보다 먼저 걸러야 한다.
         # 실측(런 G, Opus 5): "[WEB] 태그는 한 개도 쓰지 않았습니다"가 반송 대상이 됐다.
-        if NEGATION.search(sentence):
+        if is_disclaimed(sentence):
             continue
         # 한 문장에 태그가 여러 개 붙을 수 있다 — 분해표는 한 칸에 출처를 여럿 적는다.
         # 첫 만족 태그에서 멈추면 근거 있는 [WEB]이 근거 없는 [FILE]을 가려준다.
