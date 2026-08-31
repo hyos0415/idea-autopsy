@@ -54,6 +54,10 @@ claude --plugin-dir ./plugin             # 실제 로드 → /plugin Errors 탭 
 
 - **스킬이 안 보임** → `skills/`가 플러그인 루트에 있어야 함 (`.claude-plugin/` 안에 넣으면 무시됨)
 - **훅이 안 돎** → 스크립트 실행 권한 (`chmod +x`), 이벤트명 대소문자 (`PostToolUse`)
+- **훅/스킬을 고쳤는데 반영이 안 됨** → 설치본은 `plugin.json`의 `version` 문자열로 캐시되는
+  **복사본**입니다 (`~/.claude/plugins/cache/<마켓>/<플러그인>/<버전>/`). 버전을 올리지 않으면
+  `claude plugin update`가 "already at the latest version"이라며 옛 복사본을 유지합니다(실측).
+  개발 중에는 `claude --plugin-dir ./plugin`(항상 라이브)을 쓰고, 배포할 때 버전을 올리세요.
 - **훅이 도는 것 같은데 아무 일도 없음 (특히 Windows)** → 셔뱅의 `python3`가 Microsoft Store
   앱 실행 별칭 스텁일 수 있습니다. 스텁은 exit 0으로 끝나 정상 통과처럼 보입니다.
   `python3 -c "print(42)"`가 42를 내놓는지 확인하세요. rigor는 `hooks/run-rigor.sh` 런처가
