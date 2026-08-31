@@ -6,8 +6,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/rigor.py",
-            "timeout": 10
+            "command": "sh \"${CLAUDE_PLUGIN_ROOT}/hooks/run-rigor.sh\"",
+            "timeout": 15
           }
         ]
       }
