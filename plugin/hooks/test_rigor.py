@@ -19,14 +19,19 @@ def transcript(tools):
             f.write(json.dumps({"type": "assistant", "message": {"content": [{"type": "text", "text": "x"}]}}) + "\n")
     return p
 
-def run(sid, msg, tools):
+def run_full(sid, msg, tools):
     d = os.path.join(tmp, "data", sid); os.makedirs(d, exist_ok=True)
     env = dict(os.environ, CLAUDE_PLUGIN_DATA=d)
     inp = json.dumps({"session_id": sid, "transcript_path": transcript(tools), "last_assistant_message": msg})
-    out = subprocess.run([sys.executable, HOOK], input=inp, capture_output=True, text=True, env=env).stdout.strip()
-    if not out: return "pass"
-    try: return json.loads(out).get("decision") or "flag"
-    except ValueError: return "?"
+    out = subprocess.run([sys.executable, HOOK], input=inp, capture_output=True, text=True, encoding="utf-8", env=env).stdout.strip()
+    if not out: return "pass", ""
+    try:
+        j = json.loads(out)
+        return (j.get("decision") or "flag"), (j.get("reason") or j.get("systemMessage") or "")
+    except ValueError: return "?", out
+
+def run(sid, msg, tools):
+    return run_full(sid, msg, tools)[0]
 
 NOTION = ["mcp__claude_ai_Notion__notion-fetch", "mcp__claude_ai_Notion__notion-query-meeting-notes"]
 CASES = [
@@ -53,6 +58,10 @@ CASES = [
  ("맨텍스트 태그는 여전히 차단",       "capability 분해표\n[FILE] 로컬 설정에서 값을 읽어 대조했다.", ["Skill"], "block"),
  ("S4 재현: 한 칸에 근거O+근거X",     "capability 분해표\n| 6 | 아카이브 | n8n 템플릿 [WEB] / 세션에 붙어 있는 Notion MCP [FILE] | 해결 |", ["WebSearch","WebFetch"], "block"),
  ("한 칸에 근거 둘 다 있음",          "capability 분해표\n| 6 | 아카이브 | n8n 템플릿 [WEB] / 로컬 설정 [FILE] | 해결 |", ["WebSearch","Bash"], "pass"),
+ # D3 배너 — 붙였다고 다시 맞으면 아무도 붙이지 않는다. 배너 안은 공시, 밖은 주장.
+ ("배너 안으로 옮긴 주장은 통과",     "\u26a0\ufe0f 공증 실패 — 아래 1개 주장은 실행 기록으로 뒷받침되지 않음:\n- [WEB] 공식 문서를 확인했다.\n\ncapability 분해표\n결론은 유지한다.", ["Skill"], "pass"),
+ ("배너 밖에 남은 위조는 차단",       "\u26a0\ufe0f 공증 실패 — 아래 1개 주장은 실행 기록으로 뒷받침되지 않음:\n- [WEB] 공식 문서를 확인했다.\n\ncapability 분해표\n[FILE] 설정을 읽어 대조했다.", ["Skill"], "block"),
+ ("배너 목록은 빈 줄에서 끝난다",     "\u26a0\ufe0f 공증 실패 — 아래 1개 주장은 실행 기록으로 뒷받침되지 않음:\n- [WEB] a\n- [WEB] b\n\ncapability 분해표\n[WEB] 이건 배너 밖이다.", ["Skill"], "block"),
 ]
 fail = 0
 for i,(name,msg,tools,want) in enumerate(CASES):
@@ -60,5 +69,23 @@ for i,(name,msg,tools,want) in enumerate(CASES):
     ok = got == want
     fail += not ok
     print(("  OK  " if ok else "  FAIL") + f"  {name:32s} 기대={want:5s} 실제={got}")
-print(f"\n{len(CASES)-fail}/{len(CASES)} 통과")
+
+# --- 반송 회차 시나리오 (D3): 1차 반송에는 배너 지시가 없고, 2차(최종)에는 있으며,
+#     3차는 uncorrectable로 통과시키되 배너 미부착을 고지한다 ---
+FORGE = "capability 분해표\n[WEB] 공식 문서를 확인했다."
+seq = [run_full("banner-seq", FORGE, []) for _ in range(3)]
+checks = [
+    ("1차 반송 = block",           seq[0][0] == "block"),
+    ("1차엔 배너 지시 없음",         "붙여 그대로 제출" not in seq[0][1]),
+    ("2차 반송 = block",           seq[1][0] == "block"),
+    ("2차(최종)에 배너 지시 있음",    "공증 실패" in seq[1][1] and "붙여 그대로 제출" in seq[1][1]),
+    ("3차 = 교정 불가 통과",         seq[2][0] == "flag" and "교정 불가" in seq[2][1]),
+    ("3차 = 배너 미부착 고지",       "배너 부착 지시도 수행되지 않았" in seq[2][1]),
+]
+for name, ok in checks:
+    fail += not ok
+    print(("  OK  " if ok else "  FAIL") + f"  {name}")
+
+total = len(CASES) + len(checks)
+print(f"\n{total-fail}/{total} 통과")
 sys.exit(1 if fail else 0)
