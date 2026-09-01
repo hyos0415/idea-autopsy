@@ -85,6 +85,15 @@ CASES = [
  ("한 번이라도 성공하면 근거 인정",      "capability 분해표\n[WEB] 공식 문서를 확인했다.", ["!WebSearch","WebSearch"], "pass"),
  ("거부된 Read는 [FILE] 근거 아님",    "capability 분해표\n[FILE] 로컬 설정에서 값을 읽었다.", ["!Read"], "block"),
  ("거부된 도구만 있으면 검증주장도 차단",  "capability 분해표\n원문을 확인했다.", ["!WebFetch"], "block"),
+ # 도구목록 오용 — 실측 3회 재발(런 H·S4=Opus 5, 런 M=Sonnet 5). 티어 무관.
+ # 핵심: FILE 계열 도구를 실제로 호출했더라도 이 근거로는 태그가 정당화되지 않는다.
+ ("런M 실문장: 도구목록 근거",         "capability 분해표\n이 환경에 실제로 연결된 Notion MCP 도구 목록은 이번 세션에서 직접 관찰된 사실이라 `[FILE]`로 표기했습니다.", ["Skill","WebSearch"], "block"),
+ ("런H 형태: 도구 목록에서 봤다",       "capability 분해표\n[FILE] 세션 도구 목록에서 MCP 서버 이름을 확인했다.", ["Skill"], "block"),
+ # 미탐 구멍 봉합 — Read를 실제로 호출했어도 도구목록 근거는 통과하지 못한다
+ ("Read 호출해도 도구목록은 차단",      "capability 분해표\n[FILE] 세션 도구 목록에서 MCP 서버 이름을 확인했다.", ["Read","Glob","Bash"], "block"),
+ # 좁게 잡는다 — 실제 파일 읽기는 통과해야 한다
+ ("MCP 설정 파일 실제 읽기는 통과",     "capability 분해표\n[FILE] MCP 설정 파일을 읽어 연결된 서버 목록을 확인했다.", ["Read"], "pass"),
+ ("settings.json 읽기는 통과",        "capability 분해표\n[FILE] ~/.claude/settings.json 을 읽어 등재된 MCP 서버를 확인했다.", ["Read"], "pass"),
 ]
 fail = 0
 for i,(name,msg,tools,want) in enumerate(CASES):
@@ -108,6 +117,30 @@ checks = [
 for name, ok in checks:
     fail += not ok
     print(("  OK  " if ok else "  FAIL") + f"  {name}")
+
+
+# --- 이중 트래킹 가드: skills/ 와 plugin/skills/ 는 동일해야 한다 ---
+# 스킬 문서를 한쪽만 고치면 배포본(plugin/)과 어긋난다. 2026-08-31 고지문 교체가
+# 6파일 수정이었고, 그때는 어긋남을 알려주는 장치가 없었다.
+import filecmp
+ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+A, B = os.path.join(ROOT, "skills"), os.path.join(ROOT, "plugin", "skills")
+if os.path.isdir(A) and os.path.isdir(B):
+    drift = []
+    def cmp_tree(a, b, rel=""):
+        d = filecmp.dircmp(a, b)
+        for n in d.left_only:  drift.append("skills/ 에만: " + os.path.join(rel, n))
+        for n in d.right_only: drift.append("plugin/skills/ 에만: " + os.path.join(rel, n))
+        for n in d.diff_files: drift.append("내용 다름: " + os.path.join(rel, n))
+        for n in d.common_dirs:
+            cmp_tree(os.path.join(a, n), os.path.join(b, n), os.path.join(rel, n))
+    cmp_tree(A, B)
+    ok = not drift
+    fail += not ok
+    print(("  OK  " if ok else "  FAIL") + "  skills/ <-> plugin/skills/ 동일")
+    for x in drift[:8]:
+        print("        " + x)
+    checks.append(("이중 트래킹 동일", ok))
 
 total = len(CASES) + len(checks)
 print(f"\n{total-fail}/{total} 통과")
