@@ -111,19 +111,98 @@ ARTIFACT_MARKERS = [
 ]
 
 
+# 기본 로그 회전 기준. 넘으면 .1로 밀어내고 새로 쓴다 — 최대 약 2배까지만 쌓인다.
+LOG_MAX_BYTES = 1_000_000
+
+
+def plugin_version():
+    """실행 중인 복사본의 plugin.json 버전. 설치본은 버전 문자열로 캐시되는 복사본이라,
+    버전을 안 올리면 옛 복사본이 조용히 돈다(실측 2026-08-31). 로그 레코드마다 이 값을
+    남기면 어느 복사본이 돌았는지가 보인다."""
+    manifest = os.path.join(
+        os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+        ".claude-plugin",
+        "plugin.json",
+    )
+    try:
+        with open(manifest, encoding="utf-8") as fh:
+            return json.load(fh).get("version")
+    except (OSError, ValueError):
+        return None
+
+
+def log_path():
+    """RIGOR_LOG가 있으면 그것, 없으면 CLAUDE_PLUGIN_DATA/rigor/rigor.log.
+
+    예전에는 RIGOR_LOG가 없으면 아무것도 남기지 않았다. 그런데 2026-08-31에 잡은
+    무증상 실패 넷(스텁 미실행·cp949 skip·버전 캐시·거부 호출 계산)은 전부 이 때문에
+    안 보였다 — 기본 설치에서는 훅이 돌았는지 알 방법이 없었다. 그래서 기본값으로 남긴다.
+    RIGOR_LOG=off 로 끌 수 있다. 로그는 사용자 로컬에만 쓰이며 이 훅은 네트워크를 쓰지 않는다."""
+    explicit = os.environ.get("RIGOR_LOG")
+    if explicit:
+        return None if explicit.lower() in ("off", "0", "none") else explicit
+    root = os.environ.get("CLAUDE_PLUGIN_DATA")
+    if not root:
+        return None
+    directory = os.path.join(root, "rigor")
+    try:
+        os.makedirs(directory, exist_ok=True)
+    except OSError:
+        return None
+    return os.path.join(directory, "rigor.log")
+
+
+def rotate(path):
+    try:
+        if os.path.getsize(path) > LOG_MAX_BYTES:
+            os.replace(path, path + ".1")
+    except OSError:
+        pass
+
+
 def log(verdict, **fields):
-    """RIGOR_LOG가 가리키는 파일에 판정을 한 줄씩 남긴다.
-    회귀 측정(오탐률·반송 후 행동 분포)의 원자료가 된다."""
-    path = os.environ.get("RIGOR_LOG")
+    """판정을 한 줄씩 남긴다. 회귀 측정(오탐률·반송 후 행동 분포)의 원자료이자,
+    훅이 실제로 돌았다는 유일한 흔적이다."""
+    path = log_path()
     if not path:
         return
-    record = {"ts": time.strftime("%Y-%m-%dT%H:%M:%S"), "verdict": verdict}
+    record = {
+        "ts": time.strftime("%Y-%m-%dT%H:%M:%S"),
+        "verdict": verdict,
+        "ver": plugin_version(),
+    }
     record.update(fields)
+    rotate(path)
     try:
         with open(path, "a", encoding="utf-8") as fh:
             fh.write(json.dumps(record, ensure_ascii=False) + "\n")
     except OSError:
         pass
+
+
+def first_check_notice():
+    """설치 후 첫 대조에서 한 번만 띄우는 알림. 로그 파일을 열어보지 않는 사용자에게도
+    '돌았다'가 보여야 한다 — 미실행은 조용하므로, 돌았다는 신호 쪽을 시끄럽게 만든다.
+    표식은 CLAUDE_PLUGIN_DATA에 둔다. 거기가 없으면(--plugin-dir 개발 실행 등) 띄우지 않는다 —
+    매번 뜨는 알림은 소음이 되고, 소음은 무시를 가르친다."""
+    root = os.environ.get("CLAUDE_PLUGIN_DATA")
+    if not root:
+        return None
+    marker = os.path.join(root, "rigor", ".first-check")
+    if os.path.exists(marker):
+        return None
+    try:
+        os.makedirs(os.path.dirname(marker), exist_ok=True)
+        with open(marker, "w", encoding="utf-8") as fh:
+            fh.write(time.strftime("%Y-%m-%dT%H:%M:%S"))
+    except OSError:
+        return None
+    where = log_path()
+    return (
+        f"rigor: 이 설치에서 첫 대조를 실행했습니다 (v{plugin_version() or '?'})."
+        + (f" 판정 기록: {where}" if where else "")
+        + " — 이 알림은 한 번만 표시됩니다."
+    )
 
 
 def fail_open(msg):
@@ -366,6 +445,7 @@ def main():
         log("fail-open", reason="no-transcript")
         fail_open("transcript를 읽을 수 없어 대조를 생략함")
 
+    notice = first_check_notice()
     banner = has_banner(message)
     violations = find_violations(message, used)
     if not violations:
@@ -373,6 +453,8 @@ def main():
         # 주장을 취소하고 공시로 강등한 것이므로 통과가 맞다. banner 필드로
         # 구분되니 "무결"과 "공시된 미검증"이 로그에서 섞이지 않는다.
         log("pass", tools=sorted(used), banner=banner)
+        if notice:
+            emit({"systemMessage": notice})
         sys.exit(0)
 
     path = counter_path(data.get("session_id"))
@@ -395,7 +477,8 @@ def main():
         emit(
             {
                 "systemMessage": (
-                    f"rigor: 교정 불가 — {MAX_RETURNS}회 반송 후에도 "
+                    (notice + "\n" if notice else "")
+                    + f"rigor: 교정 불가 —{MAX_RETURNS}회 반송 후에도 "
                     f"근거 없는 주장 {len(violations)}건이 남아 있습니다."
                     + (
                         " 공증 실패 배너는 부착되었습니다 — 배너 밖에 남은 주장입니다."
@@ -465,7 +548,10 @@ def main():
     # 최상위 decision/reason 이어야 한다. 공식 문서의 hookSpecificOutput 예시는
     # Stop에서 차단되지 않는 것을 실측으로 확인했다(2026-08). exit 2 + stderr도
     # 차단은 되지만, 반송문이 프롬프트 인젝션으로 읽혀 모델이 거부한다.
-    emit({"decision": "block", "reason": reason})
+    payload = {"decision": "block", "reason": reason}
+    if notice:
+        payload["systemMessage"] = notice
+    emit(payload)
     sys.exit(0)
 
 

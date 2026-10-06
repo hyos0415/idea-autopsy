@@ -16,7 +16,7 @@
 |---|---|
 | `plugin/hooks/rigor.py` | Stop 훅 본체 |
 | `plugin/hooks/run-rigor.sh` | 런처. 인터프리터를 **이름이 아니라 동작으로** 고른다 |
-| `plugin/hooks/test_rigor.py` | 회귀 스위트 41케이스 |
+| `plugin/hooks/test_rigor.py` | 회귀 스위트 54케이스 |
 | `plugin/hooks/rigor-spec.md` | 훅 사양 + 실측 기록 + 설계 원칙 |
 | `skills/` · `plugin/skills/` | **동일 내용이 이중 트래킹된다** (아래 주의) |
 | `docs/run-ledger.md` | 실행 원장 — 런별 관찰 |
@@ -40,7 +40,7 @@
 ## 작업 절차
 
 ```bash
-python plugin/hooks/test_rigor.py     # 41/41 이어야 한다
+python plugin/hooks/test_rigor.py     # 54/54 이어야 한다
 claude plugin validate ./plugin
 diff -rq skills plugin/skills          # 이중 트래킹 동기 확인
 ```
@@ -64,16 +64,20 @@ diff -rq skills plugin/skills          # 이중 트래킹 동기 확인
 - 버전 미범프로 설치본이 옛 복사본 유지
 - **거부된 도구 호출이 근거로 계산** → 호출만 던지고 태그 붙이면 뚫림
 
-**조기 경보는 하나뿐이다** — `RIGOR_LOG=<파일>` 을 켜두고 줄이 쌓이는지 본다.
-한 줄도 없으면 미실행이다. 새 환경에서 처음 돌릴 때는 반드시 확인한다.
+**조기 경보는 하나뿐이다** — 로그에 줄이 쌓이는지 본다. 0.1.4부터 기본 기록이다
+(`~/.claude/plugins/data/<플러그인 id>/rigor/rigor.log`, `RIGOR_LOG`가 덮어씀).
+한 줄도 없으면 미실행, `ver`가 기대와 다르면 옛 복사본이다. 새 환경에서 처음 돌릴 때는 반드시 확인한다.
+`--plugin-dir` 실행의 id는 `idea-autopsy-inline`이다.
 
-## 열린 항목 (2026-09-01)
+## 열린 항목 (2026-10-06)
 
 - 순수 자연 조건에서 배너 회차 도달 표본 — 0건
 - 오탐률 재측정 — 기존 0/114는 도구 호출 기록이 없어 **사후 검증 불가 확정**.
   재측정 시 결과까지 기록에 남기는 절차로
 - "세션 도구 목록을 봤다 → `[FILE]`" 오용이 Opus·Sonnet 양쪽에서 3회 재발 (미해소)
 - `skills/`·`plugin/skills/` 이중 트래킹 정리
+- Git Bash 없는 Windows — 훅이 PowerShell로 가서 `sh`를 못 찾는다(exit 1, 시끄러운 실패).
+  PowerShell 재현만 했고 실제 Claude Code 환경 표본 0. 진입점 교체는 표본이 생긴 뒤에
 - 블로그 3부작 — 3부에서 레포 공개 예정. 그 전까지 외부 공개 확대 금지
 
 `HANDOFF.md`(gitignore)에 설계 대화로 되돌릴 질문이 정리돼 있다.

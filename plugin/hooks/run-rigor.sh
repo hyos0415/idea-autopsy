@@ -19,5 +19,17 @@ for p in python3 python py; do
 done
 
 # 쓸 수 있는 파이썬이 없으면 fail-open — 훅 자신의 부재로 사용자를 막지 않는다.
+# 다만 흔적은 남긴다. rigor.py가 못 도는 경로라 rigor.py의 로그가 대신 써 줄 수 없고,
+# 여기서도 침묵하면 F-1(스텁 미실행)과 같은 무증상 실패가 된다. 경로 규칙은 rigor.py의
+# log_path()와 같다 — RIGOR_LOG 우선, off면 생략, 없으면 CLAUDE_PLUGIN_DATA/rigor/rigor.log.
+case "$RIGOR_LOG" in
+  off|OFF|0|none) LOG= ;;
+  "") LOG="${CLAUDE_PLUGIN_DATA:+$CLAUDE_PLUGIN_DATA/rigor/rigor.log}" ;;
+  *) LOG="$RIGOR_LOG" ;;
+esac
+if [ -n "$LOG" ]; then
+  mkdir -p "$(dirname "$LOG")" 2>/dev/null
+  printf '{"ts":"%s","verdict":"no-python"}\n' "$(date +%Y-%m-%dT%H:%M:%S)" >>"$LOG" 2>/dev/null
+fi
 echo "rigor: 실행 가능한 python을 찾지 못해 대조를 생략함" >&2
 exit 0

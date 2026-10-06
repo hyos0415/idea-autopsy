@@ -138,6 +138,33 @@ block 기대 8건이 전원 pass로 뒤집혀 발견됐다. fail-open보다 나�
 UTF-8로 디코드하고, 출력도 `sys.stdout.buffer`에 UTF-8 바이트로 쓴다. 회귀 스위트도
 `subprocess.run(..., encoding="utf-8")`로 보낸다.
 
+**기본 설치에서도 돌았다는 흔적이 남아야 한다** (0.1.4, failure-log 33). 이전에는
+`RIGOR_LOG`가 없으면 아무것도 기록하지 않았고, 위의 무증상 실패들이 전부 그 사각에 숨었다.
+실사용 런 W(2026-09-29)도 자동 훅이 돌았는지 답하지 못했다. 지금은:
+
+- `RIGOR_LOG`가 없으면 `CLAUDE_PLUGIN_DATA/rigor/rigor.log`에 기록한다
+  (`~/.claude/plugins/data/<id>/rigor/rigor.log`, 업데이트를 거쳐 유지되는 폴더).
+  `RIGOR_LOG=<파일>`이 덮어쓰고 `RIGOR_LOG=off`가 끈다. 1MB를 넘으면 `.1`로 밀어낸다.
+- 레코드마다 `ver`(실행 중인 복사본의 `plugin.json` 버전)를 남긴다 — 버전 캐시 함정(F-3)이
+  로그 한 줄로 보인다.
+- 런처가 파이썬을 못 찾으면 `{"verdict":"no-python"}`을 같은 경로에 남긴다. rigor.py가 못 도는
+  경로라 rigor.py의 로그가 대신 써 줄 수 없다.
+- 설치 후 **첫 대조**(산출물 마커가 걸린 첫 회)에서 `systemMessage` 알림을 한 번 띄운다.
+  미실행은 조용하므로 '돌았다' 쪽을 시끄럽게 만든다. 표식은 `rigor/.first-check`.
+  skip에서는 띄우지 않는다 — 산출물과 무관한 첫 응답에 뜨는 알림은 소음이다.
+
+로그에는 판정 종류·도구 이름, 반송 시에는 해당 문장이 남는다. 사용자 로컬에만 쓰이고 훅은
+네트워크를 쓰지 않는다. 실측: `claude -p --plugin-dir ./plugin`(2026-10-06, Haiku)에서
+`RIGOR_LOG` 없이 `idea-autopsy-inline/rigor/rigor.log`에 `pass` 1줄과 `.first-check`가 생겼다.
+
+**Git Bash 없는 Windows** (문서 + 부분 재현, 2026-10-06). 공식 문서상 셸 형태 훅은 Windows에서
+Git Bash로, 없으면 PowerShell로 실행된다. 이 머신도 Windows `PATH`에는 `sh`가 없다 — Claude
+Code가 Git Bash를 자체 탐지해 쓰는 것이다. Git을 뺀 `PATH`의 PowerShell에서
+`sh "<루트>/hooks/run-rigor.sh"`를 돌리면 "not recognized"로 **exit 1**이다. 문서상 0·2 외의
+종료 코드는 transcript에 hook error 알림을 남기므로, F-1(exit 0)과 달리 **시끄러운 실패**다.
+진입점을 셸 비의존으로 바꾸지 않은 이유: 대안(exec 형태, PowerShell 폴리글롯)은 실측된 Git Bash
+경로를 표본 없이 건드린다. Git Bash 없는 실제 Claude Code 환경의 표본이 생기면 다시 본다.
+
 ## 검증 결과
 
 유닛 (`rigor.py`에 합성 입력 직접 주입):
@@ -182,7 +209,7 @@ UTF-8로 디코드하고, 출력도 `sys.stdout.buffer`에 UTF-8 바이트로 �
 도구 목록 검색이지 웹 조회가 아니다), 부정·미검증 서술은 검증 주장에서 면제.
 반송문에 태그 정의를 명시(런 F에서 모델이 `[FILE]`의 뜻을 3회차에야 알아냈다).
 
-회귀 스위트 `test_rigor.py`에 런 C·F·G·H·M·S2·S4·S5를 그대로 고정했다 (케이스 40 + 반송 회차 시나리오 6 + 이중 트래킹 가드 1 = 47). `python3 test_rigor.py`. 하네스에서 `"!도구명"`은 거부된 호출을 뜻한다. 스위트는 `skills/`와 `plugin/skills/`의 동일성도 검사한다 — 스킬 문서를 한쪽만 고치면 배포본과 어긋나는데, 2026-08-31 고지문 교체가 6파일 수정이었고 그때는 알려주는 장치가 없었다.
+회귀 스위트 `test_rigor.py`에 런 C·F·G·H·M·S2·S4·S5를 그대로 고정했다 (케이스 40 + 반송 회차 시나리오 6 + 관측성 7 + 이중 트래킹 가드 1 = 54). `python3 test_rigor.py`. 하네스에서 `"!도구명"`은 거부된 호출을 뜻한다. 스위트는 `skills/`와 `plugin/skills/`의 동일성도 검사한다 — 스킬 문서를 한쪽만 고치면 배포본과 어긋나는데, 2026-08-31 고지문 교체가 6파일 수정이었고 그때는 알려주는 장치가 없었다.
 수정 후 런 F 조건 재실행(F2)에서 통과 확인 — 다만 모델이 다른 경로(Bash+ToolSearch)를
 택해 F와 도구 조합이 동일하지는 않다. F의 정확한 조합은 회귀 스위트가 고정한다.
 
@@ -343,7 +370,7 @@ executor 스킬의 존재 이유가 "동료에게 그대로 건넬 수 있는 �
 그 시점에 모델이 한 일이 주장의 **취소**이기 때문이다 — 문장은 남아 있되 "뒷받침되지 않음"
 딱지가 붙은 채로 남는다. 수신자는 무엇을 믿으면 안 되는지 알게 된다.
 
-**로그 필드** (`RIGOR_LOG`, 기계 판독용):
+**로그 필드** (기본 `CLAUDE_PLUGIN_DATA/rigor/rigor.log`, `RIGOR_LOG`가 덮어씀 · 기계 판독용):
 
 | verdict | 필드 | 뜻 |
 |---|---|---|
@@ -351,6 +378,8 @@ executor 스킬의 존재 이유가 "동료에게 그대로 건넬 수 있는 �
 | `block` | `final: true` | 이번이 마지막 반송 — 배너 지시가 붙은 회차 |
 | `block` | `banner` | 반송 시점에 이미 배너가 있었는가 |
 | `uncorrectable` | `uncorrectable: true`, `banner`, `claims: [...]`, `returns` | 끝내 뒷받침되지 않은 문장 목록 + 배너 부착 여부 |
+| (모든 레코드) | `ver` | 실행된 복사본의 플러그인 버전 (0.1.4~) |
+| `no-python` | — | 런처가 실행 가능한 파이썬을 찾지 못함 (0.1.4~) |
 
 `banner=false`인 `uncorrectable` 레코드는 **배너 부착 지시조차 수행되지 않은 표본**이며,
 그 자체가 3차 위조 관찰치로 로그에 남는다 — 어느 쪽이든 데이터다.
