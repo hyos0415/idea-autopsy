@@ -244,6 +244,54 @@ Configure로 남기고, 사용자가 덧붙인 수단(T: 엔진 비교·BI / U: 
   서브에이전트에 위임했으므로 메인 스레드 도구 수가 조사량을 대표하지 않는다.
 - **판정 이후 착수 0건**(09-23 기준). 판정이 옳았는지는 아직 검증되지 않았다.
 
+## 실사용 판정 1건 + 후속 사슬 (2026-09-29, 설치본 0.1.3 · 웹 허용)
+
+**등록 외 보강.** 사용자가 제안서 경로와 함께 "오톱시소환"이라고 불러 coroner가 발동했다(명시 호출, 자동 발동 아님).
+판정문은 이 레포에 두지 않는다 — `~/orca/projects/project-jhs/verdicts/`.
+
+| 런 | 날짜 · 모델 | 실행 위치 | 대상 | 판정 | 도구 (메인 스레드, coroner 구간) | 훅 |
+|---|---|---|---|---|---|---|
+| W | 09-29 · Opus 5.5 | `idea-autopsy` 레포 | Project JHS 제안서 (Engineering Intelligence Agent — **사용자 본인 기획**) | **Build a Skill**(개인 축) · 서비스 축 **보류** — 웹앱·백엔드·Retrieval Arena·LangGraph Cut, 재검토 조건 감시(C7)만 gap | WebSearch 18 · WebFetch 9 (403 1) · Read 1 · Bash 2 · AskUserQuestion 1 | `RIGOR_LOG` 미설정 → **자동 실행 여부 미확인**. 수동 재현(`run-rigor.sh`에 transcript + 산출물 투입) pass ×3 (판정문·채팅 답변·지시서) |
+
+트랜스크립트: `C--Users-user-orca-idea-autopsy/018e5a6f…` — coroner 29~257행, executor 313~326행,
+eval-precondition 353행~, 이후 스킬 구현·실행·이관(orca-cli 1678행~).
+
+### 관찰
+
+**부재단정 0, 위조 관찰 0.** 열지 못했거나 요약만 본 것 5곳을 "확인 불가"로 표기했다(ChatGPT Help 403,
+Tech Radar·reachability·promptfoo는 검색 요약만, 통합 제품은 부재 추정). 판정을 가르는 근거
+(routines·AdrMcp·Renovate·Backstage ADR)만 원문을 열었다 — 탐색 축소를 축소했다고 적었다.
+
+**어휘 2계열 패턴 재현.** 사용자 어휘("기술 도입 의사결정 기록 채택 기각 재검토 조건") 2회는 일반 가이드만
+반환, 개발자 어휘("Architecture Decision Record MCP server")에서 AdrMcp·mcp-server-decisions가 히트.
+
+**이해충돌이 이중이었다.** 대상이 사용자 기획이면서, 제안서 §18이 **coroner 자신을 lifecycle 부품으로**
+포함했다. 판정문은 둘 다 공시하고, C4(대안 탐색)를 coroner로 닫은 뒤 C4를 미해결로 바꿔도 등급이
+유지되는지 따로 확인했다. 자기 자신이 판정 근거가 되는 구조는 기존 Self-Test 조항이 상정하지 않은 형태다.
+
+**같은 주제, 반대 방향의 "목적이 판정을 바꾼다"** (런 T와 교차). 런 T는 Retrieval Arena를 학습 목적과 함께
+PROCEED WITH REDUCED SCOPE로 남겼다. 런 W는 Step 1에서 목적을 "문제 해결이 1차"로 확정받고 같은 Arena를
+Cut했다. 판정문 자기 재심문에 "목적이 학습으로 바뀌면 Arena가 학습 트랙으로 살아난다"를 적어 두었다.
+이관 후 레포 `CLAUDE.md`에 재판정 문서(`docs/decisions/2026-09-29-rejudgment.md`)와 Arena 예측 격자
+사전 등록이 보인다 — **다른 세션의 작업이며, 이 세션에서 내용을 열지 않았다.**
+
+**executor 첫 호출** (09-02 이후 0회). 그리고 처음으로 사슬이 판정 이후까지 이어졌다:
+판정 → 지시서(executor) → eval 전제 확정(외부 스킬 eval-precondition) → 명세 v1(R1~R16) → 스킬 구현 → 378세션 실행 → 새 레포 이관.
+런 T·U·V 한계의 "판정 이후 착수 0건"이 이 런에서 처음 깨졌다.
+
+**지시서 단계에서 판정문의 빈틈이 드러났다.** eval 전제 확정 시 지시서 B부 수용 기준에서 정답이 확정되지
+않는 조합 9건(U0~U8)이 나왔다 — 대표적으로 "근거 링크 없는 충족은 쓰지 않는다"가 **대신 무엇을 쓸지**를
+침묵했다. 이건 coroner/executor가 만든 문장이다. executor의 "새 주장 발명 금지"는 지켰지만,
+**수용 기준을 관찰 가능한 조건으로 쓰라는 요구가 fallback 누락까지는 막지 못했다.**
+
+### 한계
+- **n=1**, 입력은 사전 등록이 아니다.
+- rigor 수동 재현 pass는 **무간섭**이지 판별력 근거가 아니다. 이 런은 실제 웹 호출이 27회라 태그↔도구 종류
+  대조로는 통과가 자명하다. 자동 훅이 돌았는지는 `RIGOR_LOG`를 켜지 않아 확인할 수 없다 — 이 레포
+  CLAUDE.md의 조기 경보 절차를 지키지 않은 런이다.
+- 판정의 옳고 그름은 여전히 미검증이다. 착수는 했지만, 착수 후 재판정 문서가 생겼으므로 원판정이 그대로
+  유지됐는지는 이 원장이 말할 수 없다.
+
 ## 게이트 판정 (protocol v1.2 사전 등록 기준)
 
 Haiku 부재단정 40% (≥40% 충족) AND Opus 5 0% (충족) → **H1 성립, 승격 트리거 충족, 실험 종결 (Fable 승부처리 불필요).**
