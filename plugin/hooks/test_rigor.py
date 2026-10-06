@@ -27,15 +27,21 @@ def transcript(tools):
             f.write(json.dumps({"type": "assistant", "message": {"content": [{"type": "text", "text": "x"}]}}) + "\n")
     return p
 
-def run_full(sid, msg, tools):
+def run_full(sid, msg, tools, **env_over):
     d = os.path.join(tmp, "data", sid); os.makedirs(d, exist_ok=True)
     env = dict(os.environ, CLAUDE_PLUGIN_DATA=d)
+    env.pop("RIGOR_LOG", None)  # 사용자 환경의 RIGOR_LOG가 스위트 결과를 바꾸지 않게
+    env.update(env_over)
     inp = json.dumps({"session_id": sid, "transcript_path": transcript(tools), "last_assistant_message": msg})
     out = subprocess.run([sys.executable, HOOK], input=inp, capture_output=True, text=True, encoding="utf-8", env=env).stdout.strip()
     if not out: return "pass", ""
     try:
         j = json.loads(out)
-        return (j.get("decision") or "flag"), (j.get("reason") or j.get("systemMessage") or "")
+        if j.get("decision"):
+            return j["decision"], j.get("reason") or ""
+        sysmsg = j.get("systemMessage") or ""
+        # 교정 불가만 flag다. 첫 대조 알림만 실린 출력은 통과다(0.1.4).
+        return ("flag" if "교정 불가" in sysmsg else "pass"), sysmsg
     except ValueError: return "?", out
 
 def run(sid, msg, tools):
@@ -94,6 +100,9 @@ CASES = [
  # 좁게 잡는다 — 실제 파일 읽기는 통과해야 한다
  ("MCP 설정 파일 실제 읽기는 통과",     "capability 분해표\n[FILE] MCP 설정 파일을 읽어 연결된 서버 목록을 확인했다.", ["Read"], "pass"),
  ("settings.json 읽기는 통과",        "capability 분해표\n[FILE] ~/.claude/settings.json 을 읽어 등재된 MCP 서버를 확인했다.", ["Read"], "pass"),
+ # 2026-10-06 실런(Haiku 4.5, 설치본 0.1.4) 2차 반송 오탐 — 반송 후 자백을 다시 위반으로 잡았다.
+ ("실문장: 검증 없이 태그 붙임 자백",  "capability 분해표\n원래 지시는 도구를 쓰지 말고 두 줄만 출력하라는 것이었는데, 제가 검증 없이 [WEB] 태그를 붙여서 위반했습니다.", [], "pass"),
+ ("'설정 없이'는 면제 아님",           "capability 분해표\n[WEB] 별도 설정 없이 바로 연동된다.", [], "block"),
 ]
 fail = 0
 for i,(name,msg,tools,want) in enumerate(CASES):
@@ -114,6 +123,37 @@ checks = [
     ("3차 = 교정 불가 통과",         seq[2][0] == "flag" and "교정 불가" in seq[2][1]),
     ("3차 = 배너 미부착 고지",       "배너 부착 지시도 수행되지 않았" in seq[2][1]),
 ]
+# --- 관측성 (H1, 0.1.4): 기본 설치에서도 훅이 돌았다는 흔적이 남아야 한다 ---
+# 2026-08-31의 무증상 실패 넷은 RIGOR_LOG 없이는 아무것도 남지 않아서 안 보였다.
+def read_log(sid):
+    p = os.path.join(tmp, "data", sid, "rigor", "rigor.log")
+    if not os.path.exists(p): return []
+    with open(p, encoding="utf-8") as f: return [json.loads(l) for l in f if l.strip()]
+
+with open(os.path.join(os.path.dirname(HOOK), "..", ".claude-plugin", "plugin.json"), encoding="utf-8") as f:
+    VER = json.load(f)["version"]
+PASS_MSG = "Build Recommendation\n[INFERENCE] 검색하지 않았다."
+obs1 = run_full("obs-default", PASS_MSG, [])
+obs2 = run_full("obs-default", PASS_MSG, [])
+run_full("obs-skip", "네, 알겠습니다.", [])
+run_full("obs-off", PASS_MSG, [], RIGOR_LOG="off")
+big = os.path.join(tmp, "data", "obs-rot", "rigor"); os.makedirs(big, exist_ok=True)
+with open(os.path.join(big, "rigor.log"), "w", encoding="utf-8") as f: f.write("x" * 1_000_001)
+run_full("obs-rot", PASS_MSG, [])
+log_default = read_log("obs-default")
+obs_checks = [
+    ("RIGOR_LOG 없이도 기본 로그 기록",   len(log_default) == 2 and log_default[0]["verdict"] == "pass"),
+    ("로그에 실행 복사본 버전 기록",       log_default and log_default[0].get("ver") == VER),
+    ("로그에 세션 id 기록",               log_default and log_default[0].get("sid") == "obs-default"),
+    ("첫 대조 알림은 첫 회에만",           "첫 대조" in obs1[1] and obs2 == ("pass", "")),
+    ("알림이 있어도 판정은 pass",          obs1[0] == "pass"),
+    ("비산출물은 skip 기록, 알림 없음",    [r["verdict"] for r in read_log("obs-skip")] == ["skip"]
+                                           and not os.path.exists(os.path.join(tmp, "data", "obs-skip", "rigor", ".first-check"))),
+    ("RIGOR_LOG=off면 기록 안 함",         read_log("obs-off") == []),
+    ("1MB 넘으면 .1로 회전",               os.path.exists(os.path.join(big, "rigor.log.1")) and len(read_log("obs-rot")) == 1),
+]
+checks += obs_checks
+
 for name, ok in checks:
     fail += not ok
     print(("  OK  " if ok else "  FAIL") + f"  {name}")

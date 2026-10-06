@@ -62,7 +62,18 @@ claude --plugin-dir ./plugin             # 실제 로드 → /plugin Errors 탭 
   앱 실행 별칭 스텁일 수 있습니다. 스텁은 exit 0으로 끝나 정상 통과처럼 보입니다.
   `python3 -c "print(42)"`가 42를 내놓는지 확인하세요. rigor는 `hooks/run-rigor.sh` 런처가
   `python3 → python → py` 중 실제로 동작하는 것을 골라 이 문제를 우회합니다.
-  훅이 실제로 돌았는지는 `RIGOR_LOG=<파일>` 환경변수로 확인하세요 — 한 줄도 없으면 미실행입니다.
+- **훅이 실제로 도는지 확인** (0.1.4부터 기본 기록) → 판정을 한 번 받은 뒤
+  `~/.claude/plugins/data/idea-autopsy-idea-autopsy/rigor/rigor.log`에 줄이 생겼는지 보세요.
+  한 줄도 없으면 미실행입니다. 각 줄의 `ver`가 방금 설치한 버전과 다르면 옛 복사본이 돌고 있는
+  것이고, `"verdict":"no-python"`이면 실행 가능한 파이썬을 못 찾은 것입니다. 설치 후 첫 대조 때
+  "rigor: 이 설치에서 첫 대조를 실행했습니다" 알림이 한 번 뜹니다.
+  경로를 바꾸려면 `RIGOR_LOG=<파일>`, 끄려면 `RIGOR_LOG=off`. 로그에는 판정 종류·도구 이름과,
+  반송된 경우 해당 문장이 남습니다. 사용자 로컬에만 쓰이며 훅은 네트워크를 쓰지 않습니다.
+- **Git Bash 없는 Windows** → 공식 문서상 훅 명령은 Git Bash로, 없으면 PowerShell로 실행됩니다.
+  rigor 명령은 `sh`로 시작하는데 PowerShell에는 `sh`가 없으므로 rigor는 돌지 않습니다.
+  이때는 조용히 넘어가지 않고 exit 1로 끝나 "hook error" 알림이 남습니다(PowerShell 재현은
+  했으나, Git Bash가 없는 실제 Claude Code 환경에서는 아직 확인하지 않았습니다).
+  Git for Windows를 설치하면 해소됩니다.
 - **마켓플레이스 인식 실패** → 레포 루트 `.claude-plugin/marketplace.json` 존재 확인
 - **뭐가 잘못됐는지 모르겠음** → `claude --debug` 로 로딩 로그 확인
 - **훅 반송문이 무시됨** → Stop 훅에서 `hookSpecificOutput.decision`은 차단되지 않습니다.
