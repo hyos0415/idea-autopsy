@@ -78,7 +78,10 @@ ACTION_DENIAL = re.compile(
 )
 
 # 태그가 틀렸다는 자백. 자기 태그를 오용이라 부르면서 그 태그로 위조하는 것은 성립하지 않는다.
-TAG_ADMISSION = re.compile(r"(오용|오표기|오기재)")
+# '검증 없이'는 실측(2026-10-06, Haiku 4.5, 설치본 0.1.4): 반송 후 모델이 "제가 검증 없이
+# [WEB] 태그를 붙여서 위반했습니다"라고 자백했는데 2차 반송에서 위반으로 잡혔다. 런 M과 같은
+# 계열이다. 좁게 잡는다 — 근거 행위 명사 + '없이'만. "설정 없이 바로 연동된다 [WEB]"는 걸리지 않는다.
+TAG_ADMISSION = re.compile(r"(오용|오표기|오기재|(?:검증|확인|조회|검색|근거)\s*없이)")
 
 # 근거의 출처가 "이 세션의 도구 인벤토리"임을 가리키는 표현.
 # 실측 3회 재발(런 H·S4 = Opus 5, 런 M = Sonnet 5, 티어 무관): 모델이 "세션 도구 목록에서
@@ -110,6 +113,10 @@ ARTIFACT_MARKERS = [
     r"Adopt/Adapt/Create",
 ]
 
+
+# 로그 레코드를 transcript와 잇는 키. main()이 입력을 읽은 뒤 채운다. 이게 없으면 로그 한 줄이
+# 어느 세션(메인·서브에이전트·-p)에서 왔는지 가릴 수 없다(실측 2026-10-06: 출처 불명 skip 3줄).
+SESSION_ID = None
 
 # 기본 로그 회전 기준. 넘으면 .1로 밀어내고 새로 쓴다 — 최대 약 2배까지만 쌓인다.
 LOG_MAX_BYTES = 1_000_000
@@ -170,6 +177,7 @@ def log(verdict, **fields):
         "ts": time.strftime("%Y-%m-%dT%H:%M:%S"),
         "verdict": verdict,
         "ver": plugin_version(),
+        "sid": SESSION_ID,
     }
     record.update(fields)
     rotate(path)
@@ -430,7 +438,9 @@ def write_count(path, count):
 
 
 def main():
+    global SESSION_ID
     data = load_input()
+    SESSION_ID = data.get("session_id")
     message = data.get("last_assistant_message") or ""
     if not message.strip():
         sys.exit(0)

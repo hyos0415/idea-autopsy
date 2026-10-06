@@ -16,7 +16,7 @@
 |---|---|
 | `plugin/hooks/rigor.py` | Stop 훅 본체 |
 | `plugin/hooks/run-rigor.sh` | 런처. 인터프리터를 **이름이 아니라 동작으로** 고른다 |
-| `plugin/hooks/test_rigor.py` | 회귀 스위트 54케이스 |
+| `plugin/hooks/test_rigor.py` | 회귀 스위트 57케이스 |
 | `plugin/hooks/rigor-spec.md` | 훅 사양 + 실측 기록 + 설계 원칙 |
 | `skills/` · `plugin/skills/` | **동일 내용이 이중 트래킹된다** (아래 주의) |
 | `docs/run-ledger.md` | 실행 원장 — 런별 관찰 |
@@ -40,7 +40,7 @@
 ## 작업 절차
 
 ```bash
-python plugin/hooks/test_rigor.py     # 54/54 이어야 한다
+python plugin/hooks/test_rigor.py     # 57/57 이어야 한다
 claude plugin validate ./plugin
 diff -rq skills plugin/skills          # 이중 트래킹 동기 확인
 ```
@@ -78,6 +78,9 @@ diff -rq skills plugin/skills          # 이중 트래킹 동기 확인
 - `skills/`·`plugin/skills/` 이중 트래킹 정리
 - Git Bash 없는 Windows — 훅이 PowerShell로 가서 `sh`를 못 찾는다(exit 1, 시끄러운 실패).
   PowerShell 재현만 했고 실제 Claude Code 환경 표본 0. 진입점 교체는 표본이 생긴 뒤에
+- 출처 불명 로그 3줄(2026-10-06) — 설치본 데이터 폴더에 `-p` 실행이 없던 시각의 skip이 찍혔고,
+  `ver`가 그 시각 레포 작업본 매니페스트와 일치했다. 서브에이전트 종료 시각과 겹치는 줄이 있다.
+  `sid`(0.1.5)로 다음 표본에서 가린다
 - 블로그 3부작 — 3부에서 레포 공개 예정. 그 전까지 외부 공개 확대 금지
 
 `HANDOFF.md`(gitignore)에 설계 대화로 되돌릴 질문이 정리돼 있다.

@@ -100,6 +100,9 @@ CASES = [
  # 좁게 잡는다 — 실제 파일 읽기는 통과해야 한다
  ("MCP 설정 파일 실제 읽기는 통과",     "capability 분해표\n[FILE] MCP 설정 파일을 읽어 연결된 서버 목록을 확인했다.", ["Read"], "pass"),
  ("settings.json 읽기는 통과",        "capability 분해표\n[FILE] ~/.claude/settings.json 을 읽어 등재된 MCP 서버를 확인했다.", ["Read"], "pass"),
+ # 2026-10-06 실런(Haiku 4.5, 설치본 0.1.4) 2차 반송 오탐 — 반송 후 자백을 다시 위반으로 잡았다.
+ ("실문장: 검증 없이 태그 붙임 자백",  "capability 분해표\n원래 지시는 도구를 쓰지 말고 두 줄만 출력하라는 것이었는데, 제가 검증 없이 [WEB] 태그를 붙여서 위반했습니다.", [], "pass"),
+ ("'설정 없이'는 면제 아님",           "capability 분해표\n[WEB] 별도 설정 없이 바로 연동된다.", [], "block"),
 ]
 fail = 0
 for i,(name,msg,tools,want) in enumerate(CASES):
@@ -141,6 +144,7 @@ log_default = read_log("obs-default")
 obs_checks = [
     ("RIGOR_LOG 없이도 기본 로그 기록",   len(log_default) == 2 and log_default[0]["verdict"] == "pass"),
     ("로그에 실행 복사본 버전 기록",       log_default and log_default[0].get("ver") == VER),
+    ("로그에 세션 id 기록",               log_default and log_default[0].get("sid") == "obs-default"),
     ("첫 대조 알림은 첫 회에만",           "첫 대조" in obs1[1] and obs2 == ("pass", "")),
     ("알림이 있어도 판정은 pass",          obs1[0] == "pass"),
     ("비산출물은 skip 기록, 알림 없음",    [r["verdict"] for r in read_log("obs-skip")] == ["skip"]
